@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"></script>
+  </head>
+  <style>
+    .monthlyReport {
+      color: rgb(115, 113, 113);
+      display: flex;
+      font-size: 15px;
+      background-color: rgb(231, 235, 239);
+    }
+  </style>
+  <body>
+    <div
+      style="
+        border-top: 3px solid #3586c4;
+        border-left: 2px solid #3586c4;
+        border-right: 2px solid #ff9700;
+        border-bottom: 3px solid #ff9700;
+        max-width: 600px;
+        max-height: fit-content;
+        padding: 10px;
+        margin: auto;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      "
+    >
+      <div style="text-align: center; align-items: center">
+        <div class="monthlyReport">
+          <div>
+            <img
+              src="./karomanagelogo.png"
+              alt=""
+              style="height: 40px; width: 40px; margin-top: 10px"
+            />
+          </div>
+          <div style="margin: auto; padding-right: 40px">
+            <h2
+              style="
+                font-size: 22px;
+                background-color: rgb(231, 235, 239);
+                align-items: center;
+              "
+            >
+            Half yearly report
+            </h2>
+          </div>
+        </div>
+        <div id="upperDiv" style="margin-bottom: 13px; margin-top: 5px"></div>
+
+        <div style="font-size: 20px; font-weight: 14px">
+          Half yearly report for KaroManage
+        </div>
+        <div style="display: flex">
+          <div
+            style="
+              margin: 10px;
+              font-weight: 50px;
+              font-size: 18px;
+              display: flex;
+              justify-content: flex-start;
+            "
+          >
+            Summary : -
+          </div>
+          <div
+            style="
+              justify-content: left;
+              flex-wrap: wrap;
+              column-gap: 20px;
+              margin-top: 15px;
+              margin-bottom: 15px;
+            "
+          >
+            <div style="font-weight: 50px; font-size: 15px; margin-bottom: 5px">
+                <span id="receivedFormattedTotal"></span>
+            </div>
+            <div style="font-weight: 50px; font-size: 15px">
+              <span id="overdueFormattedTotal"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <canvas
+        id="receivedPaymentChart"
+        style="
+          max-width: 600px;
+          max-height: 200px;
+          background: transparent;
+          margin: auto;
+          margin-bottom: 30px;
+        "
+      ></canvas>
+      <canvas
+        id="overDueChart"
+        style="
+          max-width: 600px;
+          max-height: 200px;
+          background: transparent;
+          margin: auto;
+        "
+      ></canvas>
+    </div>
+
+    <script>
+      const apiUrl =
+        "https://karomanage-dev-apim.azure-api.net/notification-hub-fnp/dynamicReports?customerId=3fe77451-9c08-4586-ac99-605ef187fa4d&organizationId=F-8765&timeInterval=halferly";
+      const headers = {
+        "Content-Type": "application/json",
+        "Ocp-Apim-Subscription-Key": "181533bf043846b18b3227d84d92f235",
+      };
+
+      const startAndEndHalfYear = () => {
+    const currentDate = new Date();
+    const month = currentDate.getMonth();
+    const isSecondHalfOfYear = month >= 6; // Determine if it's the second half of the year
+    const startMonth = isSecondHalfOfYear ? 6 : 0;
+    const endMonth = isSecondHalfOfYear ? 11 : 5;
+    const firstDayOfHalfYear = new Date(currentDate.getFullYear(), startMonth, 1);
+    const lastDayOfHalfYear = new Date(currentDate.getFullYear(), endMonth + 1, 0);
+    const formattedFirstDay = `${firstDayOfHalfYear.getFullYear()}-${(firstDayOfHalfYear.getMonth() + 1).toString().padStart(2, '0')}-01`;
+    const formattedLastDay = `${lastDayOfHalfYear.getFullYear()}-${(lastDayOfHalfYear.getMonth() + 1).toString().padStart(2, '0')}-${lastDayOfHalfYear.getDate()}`;
+    console.log(formattedFirstDay,formattedLastDay)
+    return {
+        starting: formattedFirstDay,
+        ending: formattedLastDay
+    };
+}
+
+
+      fetch(apiUrl, { headers })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.statusCode === 200) {
+            console.log(data.data.overDue, "overDueData");
+            const weekRange = startAndEndHalfYear();
+            setUpperDivContent(weekRange.starting, weekRange.ending);
+            displayOverDueGraph(
+              data.data.overDue,
+              weekRange.starting,
+              weekRange.ending
+            );
+            displayReceivedPaymentGraph(
+              data.data.recieved,
+              weekRange.starting,
+              weekRange.ending
+            );
+            const xValues = generateDaysArray(data.data.overDue);
+            const totalReceivedElement = document.getElementById(
+              "receivedFormattedTotal"
+            );
+
+            if (totalReceivedElement) {
+              const totalReceived = data.data.recieved.reduce(
+                (total, payment) => total + payment.receivedPayment,
+                0
+              );
+
+              const formattedTotal = totalReceived.toLocaleString("en-IN");
+              console.log(formattedTotal, "formattedTotal"); // Log the formatted total to check
+
+              totalReceivedElement.textContent = formattedTotal;
+            } else {
+              console.error(
+                "Element with ID 'receivedFormattedTotal' not found."
+              );
+            }
+          } else {
+            console.error("Failed to fetch data:", data.message);
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching data:", error);
+        });
+
+      function setUpperDivContent(startDate, endDate) {
+        const formattedStartDate = formatDate(startDate);
+        const formattedEndDate = formatDate(endDate);
+
+        const upperDiv = document.getElementById("upperDiv");
+        if (upperDiv) {
+          upperDiv.innerHTML = `
+            <div>${formattedStartDate} to ${formattedEndDate}</div>
+        `;
+        }
+      }
+
+      function formatDate(dateString) {
+        const [year, month, day] = dateString.split("-");
+        return `${day}/${month}/${year}`;
+      }
+      function getMonthYearFromDateString(dateString) {
+        const [year, month, day] = dateString.split("-");
+        return { month: parseInt(month, 10), year: parseInt(year, 10) };
+      }
+      function generateMonthsArray(starting, ending) {
+        const startDate = new Date(starting);
+        const endDate = new Date(ending);
+        console.log(startDate, endDate);
+        const months = [];
+        let currentDate = startDate;
+
+        while (currentDate <= endDate) {
+          const monthYear = getMonthYearFromDateString(
+            currentDate.toISOString().split("T")[0]
+          );
+          const formattedMonth = `${monthYear.month
+            .toString()
+            .padStart(2, "0")}/${monthYear.year}`;
+          if (!months.includes(formattedMonth)) {
+            months.push(formattedMonth);
+          }
+
+          // Move to the next month
+          currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+        console.log(months, "months");
+        return months;
+      }
+
+      function generateDaysArrayForReceived(receivedData) {
+        const days = new Set();
+        receivedData.forEach((payment) => {
+          const dateParts = payment.paymetReceiveDate.split("-");
+          const day = parseInt(dateParts[0], 10);
+          days.add(day);
+        });
+        const result = Array.from(days).sort((a, b) => a - b);
+        console.log("Generated X Values for Received:", result);
+        return result;
+      }
+      const monthlyReceivedData = {};
+const monthlyDueData = {};
+
+      function displayOverDueGraph(overDueData, startDate, endDate) {
+        const xValues = generateMonthsArray(startDate, endDate).map((date) => {
+          const dateParts = date.split("/");
+          return `${dateParts[0]}/${dateParts[1]}`;
+        });
+
+        const formattedXValues = xValues.map((date) => {
+          const dateParts = date.split("/");
+          return `${dateParts[1]}/${dateParts[0]}`;
+        });
+
+        overDueData.forEach((payment) => {
+  if (payment.paymentForecast && Array.isArray(payment.paymentForecast)) {
+    payment.paymentForecast.forEach((paymentDetails) => {
+      if (paymentDetails.Details) {
+        const dateParts = paymentDetails.Details.nextpaymetDate.split("-");
+        const formattedDate = `${dateParts[1]}/${dateParts[2]}`;
+        monthlyDueData[formattedDate] =
+          (monthlyDueData[formattedDate] || 0) +
+          paymentDetails.Details.duePayment;
+      }
+    });
+  }
+});
+
+        const yValues = xValues.map((date) => monthlyDueData[date] || 0);
+        console.log(yValues, "yValue for due");
+        const totalDueDiv = document.getElementById("overdueFormattedTotal");
+        if (totalDueDiv) {
+          const totalDue = yValues
+            .reduce((total, value) => total + value, 0)
+            .toLocaleString("en-IN");
+          totalDueDiv.textContent = `Total overdue payment ₹ ${totalDue}`;
+        }
+        const maxIndex = yValues.indexOf(Math.max(...yValues));
+        const totalOverdue = yValues.reduce((total, value) => total + value, 0);
+        const formattedTotal = totalOverdue.toLocaleString("en-IN");
+        var barColors = "red";
+
+        new Chart("overDueChart", {
+          type: "bar",
+          data: {
+            labels: xValues,
+            datasets: [
+              {
+                backgroundColor: barColors,
+                data: yValues,
+                barPercentage: 30,
+              },
+            ],
+          },
+          options: {
+            title: {
+              display: true,
+              text: `Total overdue payment`,
+              fontSize: 16,
+              fontStyle: "bold",
+            },
+            legend: { display: false },
+            scales: {
+              xAxes: [
+                {
+                  ticks: {
+                    fontSize: getFontSize(),
+                  },
+                  gridLines: {
+                    display: false,
+                  },
+                },
+              ],
+              yAxes: [
+                {
+                  ticks: {
+                    beginAtZero: true,
+                    fontSize: getFontSize(),
+                  },
+                  gridLines: {
+                    display: false,
+                  },
+                },
+              ],
+            },
+            tooltips: {
+              enabled: true,
+            },
+          },
+        });
+      }
+
+      function displayReceivedPaymentGraph(receivedData, startDate, endDate) {
+        console.log("Received Data:", receivedData);
+        const xValues = generateMonthsArray(startDate, endDate).map((date) => {
+          const dateParts = date.split("/");
+          return `${dateParts[0]}/${dateParts[1]}`;
+        });
+        const formattedXValues = xValues.map((date) => {
+          const dateParts = date.split("/");
+          return `${dateParts[1]}/${dateParts[0]}`;
+        });
+        console.log("X Values:", xValues);
+        receivedData.forEach((payment) => {
+  const dateParts = payment.paymetReceiveDate.split("-");
+  const formattedDate = `${dateParts[1]}/${dateParts[2]}`;
+  monthlyReceivedData[formattedDate] =
+    (monthlyReceivedData[formattedDate] || 0) + payment.receivedPayment;
+});
+console.log("Monthly Received Data:", monthlyReceivedData);
+        const yValues =  xValues.map(
+  (date) => monthlyReceivedData[date] || 0
+);
+        console.log(
+          "X Values for Received:",yValues );
+         
+       
+        const totalDueDiv = document.getElementById("receivedFormattedTotal");
+        if (totalDueDiv) {
+          const totalDue = yValues
+            .reduce((total, value) => total + value, 0)
+            .toLocaleString("en-IN");
+          totalDueDiv.textContent = `Total received payment ₹ ${totalDue}`;
+        }
+        const maxIndex = yValues.indexOf(Math.max(...yValues));
+        const totalReceived = yValues.reduce(
+          (total, value) => total + value,
+          0
+        );
+        const formattedTotal = totalReceived.toLocaleString("en-IN");
+        var barColors = "rgb(166, 206, 166)";
+        console.log("Y Values for Received:", yValues, formattedTotal);
+        new Chart("receivedPaymentChart", {
+          type: "bar",
+          data: {
+            labels: xValues,
+            datasets: [
+              {
+                backgroundColor: barColors,
+                data: yValues,
+                barPercentage: 30,
+              },
+            ],
+          },
+          options: {
+            title: {
+              display: true,
+              text: `Total received payment  `,
+              fontSize: 16,
+              fontStyle: "bold",
+            },
+            legend: { display: false },
+            scales: {
+              xAxes: [
+                {
+                  ticks: {
+                    fontSize: getFontSize(),
+                  },
+                  gridLines: {
+                    display: false,
+                  },
+                },
+              ],
+              yAxes: [
+                {
+                  ticks: {
+                    beginAtZero: true,
+                    fontSize: getFontSize(),
+                  },
+                  gridLines: {
+                    display: false,
+                  },
+                },
+              ],
+            },
+            tooltips: {
+              enabled: true,
+            },
+          },
+        });
+      }
+
+      function getFontSize() {
+        const screenWidth =
+          window.innerWidth ||
+          document.documentElement.clientWidth ||
+          document.body.clientWidth;
+        if (screenWidth <= 480) {
+          return 5;
+        } else if (screenWidth <= 768) {
+          return 10;
+        } else {
+          return 10;
+        }
+      }
+    </script>
+  </body>
+</html>
